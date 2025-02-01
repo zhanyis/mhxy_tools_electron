@@ -28,7 +28,7 @@
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.4",
     "autoprefixer": "^10.4.20",
-    "electron": "^29.1.1",
+    "electron": "^34.0.2",
     "electron-builder": "^24.13.3",
     "electron-icon-builder": "^2.0.1",
     "lowdb": "^7.0.1",
