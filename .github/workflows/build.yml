@@ -3,8 +3,16 @@ name: Build
 on:
   push:
     branches: [main]
-    tags: # Ensure the workflow triggers on tag pushes
-      - '*'
+    paths-ignore:
+      - "**.md"
+      - "**.spec.js"
+      - ".idea"
+      - ".vscode"
+      - ".dockerignore"
+      - "Dockerfile"
+      - ".gitignore"
+      - ".github/**"
+      - "!.github/workflows/build.yml"
 
 jobs:
   build:
