@@ -19,6 +19,10 @@ jobs:
   build:
     runs-on: ${{ matrix.os }}
 
+    permissions:
+      contents: write
+      discussions: write
+
     strategy:
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
@@ -50,9 +54,6 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
-        permissions:
-          contents: write
-          discussions: write
         with:
           tag_name: ${{ github.ref }}
           files: release/*
