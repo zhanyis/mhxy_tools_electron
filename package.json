@@ -1,6 +1,6 @@
 {
   "name": "mhxy_tools",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "main": "dist-electron/main/index.js",
   "homepage": "https://github.com/your-username",
   "description": "Really simple Electron + Vue + Vite boilerplate.",
