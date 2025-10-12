@@ -1,37 +1,25 @@
 <template>
   <div class="today-body">
-    <div class="today-grid-header">
-      <div class="col-span-2 row-span-3 header-border pl-2 flex flex-col justify-around">
-        <p>在线时长: {{ timeConsumed }}</p>
-        <p>物品累计收益: {{ bagsGain }}</p>
-        <p>mhb累计收益: {{ netMhb }}</p>
-        <p>点卡消费: {{ pointConsumed }}</p>
-        <p>换算现金收益: {{ sumProfit }}元</p>
-      </div>
-      <div class="header-border pl-2 flex items-center">金价</div>
-      <div><el-input v-model="goldPrice"><template #prepend>3000w</template></el-input></div>
-      <div class="header-border pl-2 flex items-center">点卡</div>
-      <div><el-input v-model="pointPrice"></el-input></div>
-      <div class="header-border pl-2 flex items-center">同时打开账号</div>
-      <div>
-        <el-select v-model="sameTimeAccount">
-          <el-option v-for="item in 8" :label="item" :value="item"></el-option>
-        </el-select>
-      </div>
-    </div>
-    <div class="flex mt-4">
-      <div class="min-w-20">初始mhb</div>
-      <el-input v-model="initCash"></el-input>
-      <el-button class="ml-2" type="primary" plain @click="startTimer" v-if="timeStart === 0">开始计时</el-button>
-      <el-button class="ml-2" type="danger" plain @click="endTimer" v-else>结束计时</el-button>
-    </div>
-    <div class="flex mt-2 mb-4 items-center">
-      <div class="min-w-20">结束mhb</div>
-      <el-input v-model="endCash"></el-input>
-      <el-button class="ml-2" type="success" plain @click="saveRecord">记录收益</el-button>
-      <el-button class="ml-2" type="warning" plain style="margin-left: 0.5rem" @click="resetRecordConfirm">重置记录</el-button>
-    </div>
-    <itemsTransfer v-model:bags="bags"/>
+    <el-descriptions title="搬砖记录" :column="2" :label-width="130" border>
+      <template #extra>
+        <el-button class="ml-2" type="primary" plain @click="startTimer" v-if="timeStart === 0">开始计时</el-button>
+        <el-button class="ml-2" type="danger" plain @click="endTimer" v-else>结束计时</el-button>
+        <el-button class="ml-2" type="success" plain @click="saveRecord">记录收益</el-button>
+        <el-button class="ml-2" type="warning" plain style="margin-left: 0.5rem" @click="resetRecordConfirm">重置记录</el-button>
+      </template>
+      <el-descriptions-item label="金价(每3000w)"><el-input v-model="goldPrice" /></el-descriptions-item>
+      <el-descriptions-item label="在线时长">{{ timeConsumed }}</el-descriptions-item>
+      <el-descriptions-item label="点卡"><priceInput v-model="pointPrice" /></el-descriptions-item>
+      <el-descriptions-item label="点卡消费MHB"><priceInput :modelValue="Number(pointConsumed)" disabled /></el-descriptions-item>
+      <el-descriptions-item label="初始MHB"><priceInput v-model="initCash" /></el-descriptions-item>
+      <el-descriptions-item label="物品收益MHB"><priceInput v-model="bagsGain" /></el-descriptions-item>
+      <el-descriptions-item label="结束MHB"><priceInput v-model="endCash" /></el-descriptions-item>
+      <el-descriptions-item label="累计收益MHB"><priceInput v-model="netMhb" /></el-descriptions-item>
+      <el-descriptions-item label="同时打开账号"><el-input-number v-model="sameTimeAccount" :min="1" /></el-descriptions-item>
+      <el-descriptions-item label="换算现金收益">{{ sumProfit }}</el-descriptions-item>
+    </el-descriptions>
+    <!-- <p class="mt-1 el-descriptions__title">背包</p> -->
+    <itemsTransfer class="mt-1" v-model:bags="bags"/>
   </div>
 </template>
 
@@ -44,6 +32,7 @@ import { computed } from 'vue';
 import { useTimestamp } from '@vueuse/core'
 import dayjs from 'dayjs';
 import { ElMessage, ElMessageBox } from 'element-plus'
+import priceInput from '../components/priceInput.vue';
 
 const { goldPrice, pointPrice, sameTimeAccount, initCash } = useSettings();
 
@@ -53,7 +42,7 @@ const { resetRecord } = useTodayStore();
 const { timestamp, pause, resume } = useTimestamp({ controls: true })
 
 const netMhb = computed(() => {
-  return endCash.value - initCash.value;
+  return endCash.value - initCash.value - Number(pointConsumed.value) + bagsGain.value;
 })
 
 const timeConsumed = computed(() => {
@@ -114,18 +103,34 @@ const formatSecond = (second: number) => {
 
 const resetRecordConfirm = () => {
   ElMessageBox.confirm(
-    '确定要重置现有记录吗？',
+    '确定要重置现有记录吗？这将清空所有当前记录数据。',
     '警告',
     {
-      confirmButtonText: 'OK',
-      cancelButtonText: 'Cancel',
+      confirmButtonText: '确定重置',
+      cancelButtonText: '取消',
       type: 'warning',
     }
   )
     .then(() => {
+      // 重置所有记录数据
+      resetRecord();
+
+      // 停止计时器
+      pause();
+
+      // 重置初始MHB为默认值
+      initCash.value = 0;
+
       ElMessage({
         type: 'success',
         message: '重置记录成功',
+      })
+    })
+    .catch(() => {
+      // 用户取消操作
+      ElMessage({
+        type: 'info',
+        message: '已取消重置',
       })
     })
 }
@@ -180,5 +185,10 @@ const saveRecord = () => {
 
   border-radius: var(--el-input-border-radius, var(--el-border-radius-base));
   box-shadow: 0 0 0 1px var(--el-input-border-color, var(--el-border-color)) inset;
+}
+
+/* 修改 el-descriptions 内部表格单元格的样式 */
+:deep(.el-descriptions__body .el-descriptions__table.is-bordered .el-descriptions__cell) {
+  padding: 5px 11px;
 }
 </style>

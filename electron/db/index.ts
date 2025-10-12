@@ -66,6 +66,15 @@ class Database {
     await this.db.read()
     console.log(`Item deleted in ${field} at key ${key} value ${value}`)
   }
+
+  async reset(field, data) {
+    await this.db.update((dbData) => {
+      dbData[field] = data || this.defaultData[field]
+      return dbData
+    })
+    await this.db.read()
+    console.log(`Field ${field} reset`)
+  }
 }
 
 export default Database

@@ -9,12 +9,14 @@
     <el-menu-item index="History">历史</el-menu-item>
   </el-menu>
   <RouterView style="flex: 1"></RouterView>
+  <UpdateNotification />
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Link } from '@element-plus/icons-vue';
+import UpdateNotification from './components/updateNotification.vue'
 
 const router = useRouter()
 

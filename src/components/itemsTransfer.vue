@@ -1,19 +1,15 @@
 <template>
   <div class="items-body-container" :style="{ 'grid-template-columns': disabled ? '1fr' : '1fr 1fr' }">
     <div class="sub-item-container" v-if="!disabled">
-      <el-image
+      <div
         class="item-image"
         v-for="item in originResult"
         :key="item.id"
-        :src="item.image"
-        :alt="item.name"
-        fit="contain"
         @click="addToBags(item)"
       >
-        <template #error>
-          {{ item.name }}
-        </template>
-      </el-image>
+        <el-avatar shape="square" size="large" :src="item.image" fit="contain" />
+        <div>{{ item.name }}</div>
+      </div>
     </div>
 
     <div
@@ -24,29 +20,12 @@
         v-for="item in bags"
         :key="item.id"
       >
-        <el-image
-          :src="item.image"
-          :alt="item.name"
-          fit="contain"
-          style="height: 48px; width: 48px"
-        >
-          <template #error>
-            <div style="
-              overflow: hidden;
-              height: 48px;
-              width: 48px;
-            ">{{ item.name }}</div>
-          </template>
-        </el-image>
-        <div class="item-counts">
-          {{ item.count }}
-        </div>
-        <el-icon class="close-items" @click="clearItems(item)" v-show="!disabled" >
-          <CloseBold />
-        </el-icon>
-        <el-icon v-show="item.count > 1 && !disabled" class="minus-items" @click="minsItem(item)" >
-          <Minus />
-        </el-icon>
+        <el-badge value="-" :offset="[0, 55]" color="red" @click="minsItem(item)" :hidden="disabled">
+          <el-badge :value="item.count" >
+            <el-avatar shape="square" size="large" :src="item.image" fit="contain" />
+          </el-badge>
+        </el-badge>
+        <div style="margin-top: -8px;">{{ item.name }}</div>
       </div>
     </div>
   </div>
@@ -54,7 +33,6 @@
 
 <script setup lang="ts">
 import { usePrice, PriceItem, CountablePriceItem } from '../hooks/usePrice';
-import { CloseBold, Minus } from '@element-plus/icons-vue';
 
 const bags = defineModel<CountablePriceItem[]>('bags', { type: Array, default: () => ([]) })
 
@@ -78,13 +56,13 @@ const addToBags = (item: PriceItem) => {
   }
 };
 
-const clearItems = (item: PriceItem) => {
-  const index = bags.value.findIndex((i) => i.id === item.id);
-  if (index === -1) {
-    return;
-  }
-  bags.value = bags.value.filter((i) => i.id !== item.id);
-}
+// const clearItems = (item: PriceItem) => {
+//   const index = bags.value.findIndex((i) => i.id === item.id);
+//   if (index === -1) {
+//     return;
+//   }
+//   bags.value = bags.value.filter((i) => i.id !== item.id);
+// }
 
 const minsItem = (item: CountablePriceItem) => {
   const index = bags.value.findIndex((i) => i.id === item.id);
@@ -108,13 +86,13 @@ const minsItem = (item: CountablePriceItem) => {
 .items-body-container {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  gap: 6px;
   height: 200px;
   flex-grow: 1;
 }
 
 .sub-item-container {
-  border-radius: var(--el-input-border-radius, var(--el-border-radius-base));
+  /* border-radius: var(--el-input-border-radius, var(--el-border-radius-base)); */
   box-shadow: 0 0 0 1px var(--el-input-border-color, var(--el-border-color)) inset;
   padding: 6px;
   overflow: auto;
@@ -123,20 +101,17 @@ const minsItem = (item: CountablePriceItem) => {
 
 .item-image {
   cursor: pointer;
-  border-radius: var(--el-input-border-radius, var(--el-border-radius-base));
-  box-shadow: 0 0 0 1px var(--el-input-border-color, var(--el-border-color)) inset;
+  /* border-radius: var(--el-input-border-radius, var(--el-border-radius-base));
+  box-shadow: 0 0 0 1px var(--el-input-border-color, var(--el-border-color)) inset; */
   position: relative;
-  width: 48px;
-  height: 48px;
+  width: 60px;
+  /* height: 60px; */
+  /* width: 80px; */
   margin: 4px;
-  display: inline-block;
-}
-
-.item-counts {
-  position: absolute;
-  bottom: -0.3rem;
-  left: 0;
-  font-weight: bold;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .close-items {
@@ -155,7 +130,7 @@ const minsItem = (item: CountablePriceItem) => {
   right: -0.5rem;
   cursor: pointer;
   border-radius: 50%;
-  background: #409eff;
+  background: red;
   color: #fff;
 }
 </style>

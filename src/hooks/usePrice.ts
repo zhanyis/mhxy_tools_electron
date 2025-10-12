@@ -28,7 +28,7 @@ export const usePrice = () => {
 
   const originResult = ref< PriceItem[]>([]);
 
-  onMounted(() => {
+  const init = () => {
     window.ipcRenderer.invoke('db:getPrice').then((res) => {
       console.log('test from price', res);
       const typeMap: Price = {};
@@ -42,11 +42,16 @@ export const usePrice = () => {
       price.value = typeMap;
       originResult.value = res;
     });
+  }
+
+  onMounted(() => {
+    init();
   });
 
   return {
     price,
     originPrice,
     originResult,
+    init
   }
 }
