@@ -31,7 +31,8 @@
     "build-icon": "electron-icon-builder --input=./public/teshelingpai.png --output=build --flatten",
     "build:electron": "electron-builder",
     "build:all": "npm run build && npm run build:electron",
-    "publish": "electron-builder --publish=always"
+    "publish": "electron-builder --publish=always",
+    "release": "vue-tsc --noEmit && vite build && electron-builder --publish=always"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.4",
