@@ -33,3 +33,14 @@ jobs:
         run: npm run release
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Upload artifacts to Release
+        if: runner.os == 'Windows'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/**/*.exe
+            release/**/*.dmg
+            release/**/*.AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
