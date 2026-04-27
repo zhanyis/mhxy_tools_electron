@@ -52,7 +52,7 @@
       :close-on-press-escape="false"
     >
       <div>
-        <p>更新已下载完成，应用将在 {{ countdown }} 秒后重启并安装更新。</p>
+        <p>更新已下载完成，是否立即重启安装？</p>
       </div>
       <template #footer>
         <el-button @click="installLater">稍后安装</el-button>
@@ -75,6 +75,7 @@ declare global {
       onUpdateDownloaded: (callback: (info: any) => void) => void
       onUpdateError: (callback: (error: string) => void) => void
       removeAllUpdateListeners: () => void
+      startDownload: () => Promise<void>
       quitAndInstall: () => void
       getAppVersion: () => Promise<string>
     }
@@ -118,6 +119,7 @@ const skipUpdate = () => {
 const downloadUpdate = () => {
   updateAvailable.value = false
   downloading.value = true
+  window.electronAPI?.startDownload()
   ElMessage.success('开始下载更新...')
 }
 
@@ -175,7 +177,6 @@ onMounted(async () => {
     window.electronAPI.onUpdateDownloaded((info: any) => {
       downloading.value = false
       downloaded.value = true
-      startCountdown()
       ElMessage.success('更新下载完成，准备安装...')
     })
 

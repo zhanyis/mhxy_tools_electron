@@ -49,16 +49,12 @@ const indexHtml = path.join(RENDERER_DIST, 'index.html')
 
 // 配置自动更新
 function setupAutoUpdater() {
-  // 配置更新服务器（GitHub Release）
-  autoUpdater.setFeedURL({
-    provider: 'github',
-    owner: 'your-username', // 替换为你的 GitHub 用户名
-    repo: 'mhxy_tools_electron', // 替换为你的仓库名
-    private: false // 如果是私有仓库设置为 true
-  })
+  // 禁止自动下载，由用户决定是否更新
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = false
 
-  // 检查更新
-  autoUpdater.checkForUpdatesAndNotify()
+  // 检查更新（只检查，不自动下载）
+  autoUpdater.checkForUpdates()
 
   // 更新事件处理
   autoUpdater.on('checking-for-update', () => {
@@ -92,13 +88,8 @@ function setupAutoUpdater() {
 
   autoUpdater.on('update-downloaded', (info) => {
     console.log('更新下载完成:', info.version)
-    // 通知渲染进程下载完成
+    // 通知渲染进程下载完成，由用户决定何时安装
     win?.webContents.send('update-downloaded', info)
-
-    // 5秒后自动重启应用安装更新
-    setTimeout(() => {
-      autoUpdater.quitAndInstall()
-    }, 5000)
   })
 }
 
@@ -111,7 +102,7 @@ function createMenu() {
         {
           label: '检查更新',
           click: () => {
-            autoUpdater.checkForUpdatesAndNotify()
+            autoUpdater.checkForUpdates()
           }
         },
         { type: 'separator' },
@@ -163,11 +154,11 @@ async function createWindow() {
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', new Date().toLocaleString())
 
-    // 窗口加载完成后检查更新
-    if (!VITE_DEV_SERVER_URL) { // 只在生产环境检查更新
+    // 窗口加载完成后检查更新（只在生产环境，且只检查不自动下载）
+    if (!VITE_DEV_SERVER_URL) {
       setTimeout(() => {
-        autoUpdater.checkForUpdatesAndNotify()
-      }, 3000) // 3秒后检查更新
+        autoUpdater.checkForUpdates()
+      }, 3000)
     }
   })
 
@@ -261,7 +252,12 @@ ipcMain.handle('open-win', (_, arg) => {
 
 // 添加 IPC 处理程序用于手动检查更新
 ipcMain.handle('check-for-updates', () => {
-  autoUpdater.checkForUpdatesAndNotify()
+  autoUpdater.checkForUpdates()
+})
+
+// 用户确认后开始下载
+ipcMain.handle('start-download', () => {
+  autoUpdater.downloadUpdate()
 })
 
 ipcMain.handle('quit-and-install', () => {
