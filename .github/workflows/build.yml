@@ -1,63 +1,36 @@
-name: Build
+name: Release
 
 on:
   push:
-    # branches: [main]
-    tags: ['*']
-    paths-ignore:
-      - "**.md"
-      - "**.spec.js"
-      - ".idea"
-      - ".vscode"
-      - ".dockerignore"
-      - "Dockerfile"
-      - ".gitignore"
-      - ".github/**"
-      - "!.github/workflows/build.yml"
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
 
 jobs:
-  build:
+  release:
     runs-on: ${{ matrix.os }}
 
-    # permissions:
-    #   contents: write
-    #   discussions: write
-
     strategy:
+      fail-fast: false
       matrix:
-        os: [windows-latest]
+        os: [windows-latest, macos-latest, ubuntu-latest]
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
+          cache: 'npm'
 
       - name: Install Dependencies
         run: npm install
 
-      - name: Build Release Files
-        run: npm run build
+      - name: Build & Publish to GitHub Release
+        run: npm run publish
         env:
-          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release_on_${{ matrix.os }}
-          path: release/
-          retention-days: 5
-
-      # - name: Release
-      #   uses: softprops/action-gh-release@v2
-      #   if: github.ref_type == 'tag'
-      #   with:
-      #     tag_name: ${{ github.ref }}
-      #     files: release/*
-      #     draft: false
-      #     prerelease: false
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

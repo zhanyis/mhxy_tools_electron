@@ -42,5 +42,11 @@
       "AppImage"
     ],
     "artifactName": "${productName}-Linux-${version}.${ext}"
-  }
+  },
+  "publish": [
+    {
+      "provider": "github",
+      "releaseType": "release"
+    }
+  ]
 }
