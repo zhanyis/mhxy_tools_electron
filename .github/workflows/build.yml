@@ -30,6 +30,6 @@ jobs:
         run: npm install
 
       - name: Build & Publish to GitHub Release
-        run: npm run publish
+        run: npm run release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
