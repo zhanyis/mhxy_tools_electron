@@ -1,0 +1,42 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Price {
+  id    Int    @id
+  name  String
+  price Int
+  type  String
+  image String
+
+  @@map("prices")
+}
+
+model Settings {
+  id              Int @id
+  goldPrice       Int
+  pointPrice      Int
+  sameTimeAccount Int
+  initCash        Int
+}
+
+model WorkRecord {
+  id              Int    @id @default(autoincrement())
+  start           String
+  end             String
+  time            String
+  mhb             Int
+  point           Int
+  goldPrice       Int
+  bags            String
+  profit          Float
+  sameTimeAccount Int
+  bagsGain        Int
+
+  @@map("records")
+}
