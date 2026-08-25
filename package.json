@@ -55,6 +55,7 @@
     "electron-updater": "^6.6.2",
     "element-plus": "^2.8.8",
     "pinia": "^2.2.6",
+    "tesseract.js": "^7.0.0",
     "vue-router": "^4.4.5"
   }
 }

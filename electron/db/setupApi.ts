@@ -1,4 +1,4 @@
-import { ipcMain } from "electron"
+import { desktopCapturer, ipcMain } from "electron"
 import { app } from "electron"
 import { promises as fs } from 'fs'
 import path from 'path'
@@ -60,6 +60,21 @@ export const setupApi = async () => {
 
   ipcMain.handle('db:deleteRecord', async (event, key, value) => {
     await database.deleteRecord(key, value)
+  })
+
+  ipcMain.handle('capture:getWindows', async () => {
+    const sources = await desktopCapturer.getSources({
+      types: ['window'],
+      thumbnailSize: { width: 320, height: 180 },
+      fetchWindowIcons: true,
+    })
+
+    return sources.map(source => ({
+      id: source.id,
+      name: source.name,
+      thumbnail: source.thumbnail.toDataURL(),
+      appIcon: source.appIcon?.toDataURL() ?? null,
+    }))
   })
 
   // 图片处理相关接口
