@@ -2,77 +2,64 @@ import { ipcMain } from "electron"
 import { app } from "electron"
 import { promises as fs } from 'fs'
 import path from 'path'
-import LocalLowDb from './index'
+import Database from './index'
 
-export let db = null;
+export let db: Database | null = null;
 
 export const setupApi = async () => {
 
-  db = new LocalLowDb()
-  await db.init()
+  const database = new Database()
+  await database.init()
+  db = database
 
   ipcMain.handle('db:getPrice', async () => {
-    return db.read('price')
+    return database.read('price')
   })
 
   ipcMain.handle('db:setPrice', async (event, price) => {
-    console.log('setPrice', price)
-    const idPriceMap = price.reduce((acc, item) => {
-      acc[item.id] = item
-      return acc
-    }, {})
-    const ids = price.map((item) => item.id)
     if (price.length) {
-      await db.update('price', (data) => {
-        return data.map((item) => {
-          if (ids.includes(item.id)) {
-            item.price = idPriceMap[item.id].price
-          }
-          return item
-        })
-      })
+      await database.setPrice(price)
     }
   })
 
   ipcMain.handle('db:addPrice', async (event, item) => {
-    // 生成新的 ID
-    const priceList = await db.read('price')
-    const maxId = priceList.length > 0 ? Math.max(...priceList.map(p => p.id)) : 0
-    const newItem = { ...item, id: maxId + 1 }
-    await db.create('price', newItem)
+    await database.addPrice(item)
   })
 
   ipcMain.handle('db:deletePrice', async (event, id) => {
-    await db.delete('price', 'id', id)
+    await database.deletePrice(id)
   })
 
   ipcMain.handle('db:resetPrice', async (event, data) => {
-    await db.reset('price', data)
+    await database.resetPrice(data)
   })
 
   ipcMain.handle('db:getSettings', async () => {
-    return db.read('settings')
+    return database.read('settings')
   })
 
   ipcMain.handle('db:setSettings', async (event, key, value) => {
-    await db.update('settings', (data) => {
-      data[key] = value
-      return data
-    })
+    await database.updateSetting(key, value)
   })
 
   ipcMain.handle('db:getRecords', async () => {
-    return db.read('records')
+    return database.read('records')
   })
 
   ipcMain.handle('db:addRecord', async (event, record) => {
-    const records = await db.read('records')
-    const id = records.length ? records[records.length - 1].id + 1 : 1
-    await db.create('records', { ...record, id })
+    await database.addRecord({
+      ...record,
+      mhb: Number(record.mhb),
+      point: Number(record.point),
+      goldPrice: Number(record.goldPrice),
+      profit: Number(record.profit),
+      sameTimeAccount: Number(record.sameTimeAccount),
+      bagsGain: Number(record.bagsGain),
+    })
   })
 
   ipcMain.handle('db:deleteRecord', async (event, key, value) => {
-    await db.delete('records', key, value)
+    await database.deleteRecord(key, value)
   })
 
   // 图片处理相关接口
