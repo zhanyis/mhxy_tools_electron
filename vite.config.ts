@@ -18,7 +18,7 @@ export default defineConfig(({ command }) => {
       electron({
         main: {
           // Shortcut of `build.lib.entry`
-          entry: 'electron/main/index.ts',
+          entry: { index: 'electron/main/index.ts', ocrWorker: 'electron/main/ocrWorker.ts' },
           onstart({ startup }) {
             if (process.env.VSCODE_DEBUG) {
               console.log(/* For `.vscode/.debug.script.mjs` */'[startup] Electron App')
@@ -32,6 +32,9 @@ export default defineConfig(({ command }) => {
               minify: isBuild,
               outDir: 'dist-electron/main',
               rollupOptions: {
+                output: {
+                  entryFileNames: chunk => chunk.name === 'ocrWorker' ? 'ocrWorker.mjs' : '[name].js',
+                },
                 // Some third-party Node.js libraries may not be built correctly by Vite, especially `C/C++` addons, 
                 // we can use `external` to exclude them to ensure they work correctly.
                 // Others need to put them in `dependencies` to ensure they are collected into `app.asar` after the app is built.

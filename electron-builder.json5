@@ -4,6 +4,8 @@
   "appId": "YourAppID",
   "asar": true,
   "asarUnpack": [
+    "dist-electron/main/ocrWorker.mjs",
+    "node_modules/**",
     "**/node_modules/.prisma/client/**",
     "**/node_modules/@prisma/engines/**"
   ],

@@ -5,6 +5,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { promises as fs } from 'node:fs'
 import { setupApi } from '../db/setupApi'
+import { setupScreenOcr } from './screenOcr'
 
 import pkg from 'electron-updater'
 const { autoUpdater } = pkg
@@ -143,6 +144,7 @@ async function createWindow() {
   })
 
   await setupApi()
+  setupScreenOcr(win)
 
   if (VITE_DEV_SERVER_URL) { // #298
     win.loadURL(VITE_DEV_SERVER_URL)

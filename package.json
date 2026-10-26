@@ -29,7 +29,7 @@
     "build:electron": "electron-builder",
     "build:all": "npm run build && npm run build:electron",
     "publish": "electron-builder --publish=always",
-    "release": "vue-tsc --noEmit && vite build && electron-builder --publish=always"
+    "release": "prisma generate && vue-tsc --noEmit && vite build && electron-builder --publish=always"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.4",
@@ -55,7 +55,7 @@
     "electron-updater": "^6.6.2",
     "element-plus": "^2.8.8",
     "pinia": "^2.2.6",
-    "tesseract.js": "^7.0.0",
+    "tesseract.js": "^6.0.1",
     "vue-router": "^4.4.5"
   }
 }

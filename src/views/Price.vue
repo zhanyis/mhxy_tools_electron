@@ -1,6 +1,7 @@
 <template>
   <el-card shadow="never" style="overflow-y: scroll">
-    <div style="margin-bottom: 16px;" class="flex items-center">
+    <div style="margin-bottom: 16px; gap: 8px; flex-wrap: wrap;" class="flex items-center justify-between">
+      <div class="flex items-center" style="gap: 8px;">
       <el-button @click="exportPrice" class="mr-2">导出</el-button>
       <el-upload
         class="mr-2"
@@ -12,7 +13,24 @@
         <el-button>导入</el-button>
       </el-upload>
       <el-button @click="resetPrice" type="danger" plain>重置</el-button>
-      <el-button class="ml-2" type="primary" plain @click="openCaptureDialog">实时采集</el-button>
+      </div>
+      <div class="flex items-center justify-end" style="gap: 8px; flex-wrap: wrap; margin-left: auto;">
+      <el-button @click="screenOcrVisible = true" type="primary">识屏设置 / 结果</el-button>
+      <el-tooltip :disabled="screenOcrState.ready || screenOcrState.active" content="请先打开识屏设置，选择屏幕或窗口并框选区域">
+        <span class="flex items-center" style="gap: 8px;">
+          <span>在线识屏</span>
+          <el-switch
+            :model-value="screenOcrState.active"
+            :disabled="(!screenOcrState.ready && !screenOcrState.active) || screenOcrState.busy"
+            aria-label="在线识屏开关"
+            @change="toggleScreenOcr"
+          />
+        </span>
+      </el-tooltip>
+      <span role="status" style="font-size: 12px;" :style="{ color: screenOcrState.error ? 'var(--el-color-danger)' : 'var(--el-text-color-secondary)' }">
+        {{ screenOcrState.error || screenOcrState.status }}
+      </span>
+      </div>
     </div>
     <el-descriptions
       v-for="type in Object.keys(price)"
@@ -57,46 +75,7 @@
     </el-descriptions>
   </el-card>
 
-  <el-dialog v-model="captureDialog.visible" title="实时文字解析" width="680px" @closed="closeCaptureDialog">
-    <div class="capture-toolbar">
-      <el-select
-        v-model="captureDialog.selectedId"
-        placeholder="请选择要解析的窗口"
-        filterable
-        style="flex: 1"
-        :disabled="captureDialog.running"
-      >
-        <el-option
-          v-for="source in captureSources"
-          :key="source.id"
-          :label="source.name"
-          :value="source.id"
-        />
-      </el-select>
-      <el-button :disabled="captureDialog.running" @click="loadCaptureSources">刷新窗口</el-button>
-    </div>
-    <div v-if="selectedCaptureSource" class="capture-preview">
-      <img :src="selectedCaptureSource.thumbnail" :alt="selectedCaptureSource.name" />
-      <span>{{ selectedCaptureSource.name }}</span>
-    </div>
-    <div class="capture-actions">
-      <el-button type="primary" :loading="captureDialog.recognizing" :disabled="captureDialog.running || !captureDialog.selectedId" @click="recognizeOnce">
-        解析当前画面
-      </el-button>
-      <el-button type="success" :disabled="captureDialog.running || !captureDialog.selectedId" @click="startCapture">
-        开始实时解析
-      </el-button>
-      <el-button type="danger" plain :disabled="!captureDialog.running" @click="stopCapture">停止</el-button>
-    </div>
-    <el-alert v-if="captureDialog.status" :title="captureDialog.status" type="info" :closable="false" class="capture-status" />
-    <el-input
-      v-model="captureDialog.text"
-      type="textarea"
-      :rows="9"
-      readonly
-      placeholder="解析结果会显示在这里"
-    />
-  </el-dialog>
+  <ScreenOcr ref="screenOcr" v-model="screenOcrVisible" @state-change="screenOcrState = $event" />
 
   <el-dialog v-model="gemDetailDialog.visible" :title="gemDetailDialog.title" width="70%">
     <el-table :data="gemDetailDialog.list" style="width: 100%" height="300" >
@@ -168,137 +147,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, onMounted, ref } from 'vue';
+import { onBeforeUnmount, reactive, onMounted, ref } from 'vue';
 import { usePrice } from '../hooks/usePrice';
 import priceInput from '../components/priceInput.vue';
+import ScreenOcr from '../components/screenOcr.vue';
 import { MoreFilled, DeleteFilled, Plus } from '@element-plus/icons-vue';
 import { ElMessageBox } from 'element-plus'
-import { createWorker } from 'tesseract.js'
-import tesseractWorkerPath from 'tesseract.js/dist/worker.min.js?url'
 
 const { price, originPrice, init, originResult } = usePrice();
-
-interface CaptureSource {
-  id: string
-  name: string
-  thumbnail: string
-  appIcon: string | null
-}
-
-const captureSources = ref<CaptureSource[]>([])
-const captureDialog = reactive({
-  visible: false,
-  selectedId: '',
-  running: false,
-  recognizing: false,
-  status: '',
-  text: '',
-})
-const selectedCaptureSource = computed(() => captureSources.value.find(source => source.id === captureDialog.selectedId))
-let captureStream: MediaStream | null = null
-let captureVideo: HTMLVideoElement | null = null
-let captureCanvas: HTMLCanvasElement | null = null
-let captureTimer: number | null = null
-let ocrWorker: Awaited<ReturnType<typeof createWorker>> | null = null
-
-const loadCaptureSources = async () => {
-  captureSources.value = await window.ipcRenderer.invoke('capture:getWindows') as CaptureSource[]
-  if (!captureSources.value.some(source => source.id === captureDialog.selectedId)) {
-    captureDialog.selectedId = captureSources.value[0]?.id ?? ''
+const screenOcrVisible = ref(false);
+const screenOcr = ref<InstanceType<typeof ScreenOcr>>();
+const screenOcrState = ref({ ready: false, active: false, busy: false, status: '', error: '' });
+const toggleScreenOcr = (enabled: boolean | string | number) => {
+  if (enabled) {
+    void screenOcr.value?.start();
+  } else {
+    screenOcr.value?.stop();
   }
-}
-
-const openCaptureDialog = async () => {
-  captureDialog.visible = true
-  captureDialog.status = '正在获取窗口列表...'
-  try {
-    await loadCaptureSources()
-    captureDialog.status = captureSources.value.length ? '请选择窗口后开始解析' : '没有找到可采集的窗口'
-  } catch (error) {
-    captureDialog.status = '获取窗口列表失败'
-    console.error('获取窗口列表失败:', error)
-  }
-}
-
-const ensureCaptureStream = async () => {
-  if (captureStream && captureVideo) return
-  if (!captureDialog.selectedId) throw new Error('请选择要解析的窗口')
-  captureStream = await navigator.mediaDevices.getUserMedia({
-    audio: false,
-    video: {
-      mandatory: {
-        chromeMediaSource: 'desktop',
-        chromeMediaSourceId: captureDialog.selectedId,
-      },
-    },
-  } as MediaStreamConstraints)
-  captureVideo = document.createElement('video')
-  captureVideo.srcObject = captureStream
-  await new Promise<void>((resolve) => {
-    captureVideo!.onloadedmetadata = () => resolve()
-  })
-  await captureVideo.play()
-  captureCanvas = document.createElement('canvas')
-  captureCanvas.width = captureVideo.videoWidth
-  captureCanvas.height = captureVideo.videoHeight
-}
-
-const recognizeFrame = async () => {
-  if (captureDialog.recognizing) return
-  captureDialog.recognizing = true
-  try {
-    await ensureCaptureStream()
-    if (!ocrWorker) {
-      captureDialog.status = '正在加载中文 OCR 模型，首次加载可能需要一些时间...'
-      ocrWorker = await createWorker('chi_sim+eng', undefined, {
-        workerPath: tesseractWorkerPath,
-        workerBlobURL: false,
-      })
-    }
-    const context = captureCanvas!.getContext('2d')
-    context!.drawImage(captureVideo!, 0, 0, captureCanvas!.width, captureCanvas!.height)
-    const result = await ocrWorker.recognize(captureCanvas!)
-    captureDialog.text = result.data.text.trim()
-    captureDialog.status = `解析完成 ${new Date().toLocaleTimeString()}`
-  } catch (error) {
-    captureDialog.status = '解析失败，请确认窗口仍然存在并重试'
-    console.error('窗口文字解析失败:', error)
-  } finally {
-    captureDialog.recognizing = false
-  }
-}
-
-const recognizeOnce = async () => {
-  await recognizeFrame()
-  stopCaptureStream()
-}
-
-const startCapture = async () => {
-  captureDialog.running = true
-  await recognizeFrame()
-  captureTimer = window.setInterval(() => void recognizeFrame(), 2500)
-}
-
-const stopCaptureStream = () => {
-  if (captureTimer !== null) window.clearInterval(captureTimer)
-  captureTimer = null
-  captureStream?.getTracks().forEach(track => track.stop())
-  captureStream = null
-  captureVideo = null
-  captureCanvas = null
-  captureDialog.running = false
-}
-
-const stopCapture = () => {
-  stopCaptureStream()
-  captureDialog.status = '已停止实时解析'
-}
-
-const closeCaptureDialog = () => {
-  stopCaptureStream()
-  void ocrWorker?.terminate()
-  ocrWorker = null
-}
+};
 
 const gemDetailDialog = reactive({
   visible: false,
@@ -336,7 +202,7 @@ const showGemDetail = (name: string, item: { price: number; image: string }) => 
       } else if (i === 2) {
         tempList.push({
           name: `${i}级${name}`,
-          price: item.price,
+          price: item.price * 2,
           count: 2,
         });
       } else {
@@ -533,7 +399,6 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  closeCaptureDialog();
   console.log('onBeforeUnmount');
   let diff = [];
   for (const type in price.value) {
