@@ -1,5 +1,9 @@
 <template>
   <el-card shadow="never" style="overflow-y: scroll">
+    <div style="margin-bottom: 12px;">
+      <strong>基础物价</strong>
+      <span style="margin-left: 12px; color: var(--el-text-color-secondary); font-size: 12px;">未采集报价的物品仍保留原价格和图片；喊话报价只补充统计，不覆盖基础物价。</span>
+    </div>
     <div style="margin-bottom: 16px; gap: 8px; flex-wrap: wrap;" class="flex items-center justify-between">
       <div class="flex items-center" style="gap: 8px;">
       <el-button @click="exportPrice" class="mr-2">导出</el-button>
@@ -15,25 +19,17 @@
       <el-button @click="resetPrice" type="danger" plain>重置</el-button>
       </div>
       <div class="flex items-center justify-end" style="gap: 8px; flex-wrap: wrap; margin-left: auto;">
-      <el-button @click="screenOcrVisible = true" type="primary">识屏设置 / 结果</el-button>
-      <el-tooltip :disabled="screenOcrState.ready || screenOcrState.active" content="请先打开识屏设置，选择屏幕或窗口并框选区域">
-        <span class="flex items-center" style="gap: 8px;">
-          <span>在线识屏</span>
-          <el-switch
-            :model-value="screenOcrState.active"
-            :disabled="(!screenOcrState.ready && !screenOcrState.active) || screenOcrState.busy"
-            aria-label="在线识屏开关"
-            @change="toggleScreenOcr"
-          />
+        <span class="ocr-status" role="status">
+          <span class="ocr-status-dot" :class="{ 'is-active': screenOcrState.active }" aria-hidden="true"></span>
+          {{ screenOcrState.active ? '正在识别' : '已停止' }}
         </span>
-      </el-tooltip>
-      <span role="status" style="font-size: 12px;" :style="{ color: screenOcrState.error ? 'var(--el-color-danger)' : 'var(--el-text-color-secondary)' }">
-        {{ screenOcrState.error || screenOcrState.status }}
-      </span>
+        <el-button @click="screenOcrVisible = true" type="primary">识屏设置</el-button>
+        <el-button @click="merchantQuotesVisible = true" type="primary" plain>喊话报价{{ pendingQuotes ? ` (${pendingQuotes} 待确认)` : '' }}</el-button>
       </div>
     </div>
     <el-descriptions
       v-for="type in Object.keys(price)"
+      :key="type"
       :title="type"
       :column="2"
       border
@@ -44,6 +40,7 @@
       </template>
       <el-descriptions-item
         v-for="name in Object.keys(price[type])"
+        :key="name"
         :label="name"
       >
         <template #label>
@@ -55,7 +52,7 @@
             ">
             <el-image
               style="width: 32px; height: 32px; margin-right: 6px;flex-shrink: 0;"
-              :src="price[type][name].image"
+              :src="imageUrl(price[type][name].image)"
               fit="contain"
               :alt="name"
             />
@@ -71,11 +68,24 @@
         <priceInput
           v-model="price[type][name].price"
         />
+        <div class="quote-summary">
+          <template v-if="summaryFor(price[type][name])">
+            <span>收购最低 {{ summaryFor(price[type][name])?.minimum.toLocaleString() }} / 最高 {{ summaryFor(price[type][name])?.maximum.toLocaleString() }} MHB</span>
+            <span v-if="summaryFor(price[type][name])?.changePercent != null" :class="(summaryFor(price[type][name])?.changePercent ?? 0) > 0 ? 'quote-up' : 'quote-down'">
+              日均价变化 {{ formatChange(summaryFor(price[type][name])?.changePercent) }}
+            </span>
+          </template>
+          <el-link type="primary" @click="showPriceTrend(price[type][name])">价格趋势{{ summaryFor(price[type][name]) ? ` (${summaryFor(price[type][name])?.count})` : '' }}</el-link>
+        </div>
       </el-descriptions-item>
     </el-descriptions>
   </el-card>
 
-  <ScreenOcr ref="screenOcr" v-model="screenOcrVisible" @state-change="screenOcrState = $event" />
+  <ScreenOcr v-model="screenOcrVisible" @state-change="screenOcrState = $event" @text-recognized="quoteFrame = $event" />
+  <MerchantQuotes ref="merchantQuotesPanel" v-model="merchantQuotesVisible" v-model:scope="marketScope" :items="catalogItems" :frame="quoteFrame"
+    @pending-change="pendingQuotes = $event" @summaries-change="quoteSummaries = $event" @quotes-change="marketRevision++" />
+  <PriceTrend v-model="priceTrendVisible" :scope="marketScope" :item-key="trendItem ? quoteItemKey(trendItem) : ''" :item-name="trendItem?.name ?? ''"
+    :base-price="Number(trendItem?.price ?? 0)" :summary="trendItem ? summaryFor(trendItem) : undefined" :revision="marketRevision" @changed="refreshQuotes" />
 
   <el-dialog v-model="gemDetailDialog.visible" :title="gemDetailDialog.title" width="70%">
     <el-table :data="gemDetailDialog.list" style="width: 100%" height="300" >
@@ -109,7 +119,7 @@
               <div style="display: flex; align-items: center;">
                 <el-image
                   style="width: 24px; height: 24px; margin-right: 8px;"
-                  :src="image"
+                  :src="imageUrl(image)"
                   fit="contain"
                 />
                 {{ image.split('/').pop()?.split('.')[0] }}
@@ -132,7 +142,7 @@
           <span style="font-size: 12px; color: #666; margin-right: 8px;">已选择:</span>
           <el-image
             style="width: 32px; height: 32px; vertical-align: middle; margin-right: 8px;"
-            :src="addItemDialog.form.image"
+            :src="imageUrl(addItemDialog.form.image)"
             fit="contain"
           />
           <span style="font-size: 12px; color: #333;">{{ addItemDialog.form.image.split('/').pop()?.split('.')[0] }}</span>
@@ -147,24 +157,37 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, reactive, onMounted, ref } from 'vue';
 import { usePrice } from '../hooks/usePrice';
 import priceInput from '../components/priceInput.vue';
 import ScreenOcr from '../components/screenOcr.vue';
+import MerchantQuotes from '../components/merchantQuotes.vue';
+import PriceTrend from '../components/priceTrend.vue';
+import { quoteItemKey, type QuoteItem, type QuoteSummary } from '../utils/merchantQuotes';
+import { resolveItemImage } from '../utils/itemImages';
+import type { QuoteOcrFrame } from '../utils/ocrQuality';
 import { MoreFilled, DeleteFilled, Plus } from '@element-plus/icons-vue';
 import { ElMessageBox } from 'element-plus'
 
 const { price, originPrice, init, originResult } = usePrice();
 const screenOcrVisible = ref(false);
-const screenOcr = ref<InstanceType<typeof ScreenOcr>>();
 const screenOcrState = ref({ ready: false, active: false, busy: false, status: '', error: '' });
-const toggleScreenOcr = (enabled: boolean | string | number) => {
-  if (enabled) {
-    void screenOcr.value?.start();
-  } else {
-    screenOcr.value?.stop();
-  }
-};
+const merchantQuotesVisible = ref(false);
+const merchantQuotesPanel = ref<InstanceType<typeof MerchantQuotes>>();
+const marketScope = ref(localStorage.getItem('merchant-quote-scope') || '默认');
+const quoteFrame = ref<QuoteOcrFrame>();
+const imageUrl = (image?: string) => resolveItemImage(image, import.meta.env.BASE_URL);
+const pendingQuotes = ref(0);
+const quoteSummaries = ref<QuoteSummary[]>([]);
+const marketRevision = ref(0);
+const catalogItems = computed(() => Object.values(price.value).flatMap(group => Object.values(group)));
+const summaryMap = computed(() => new Map(quoteSummaries.value.map(row => [row.itemKey, row])));
+const summaryFor = (item: QuoteItem) => summaryMap.value.get(quoteItemKey(item));
+const formatChange = (value?: number | null) => value == null ? '—' : `${value > 0 ? '+' : ''}${value.toFixed(2)}%`;
+const priceTrendVisible = ref(false);
+const trendItem = ref<QuoteItem>();
+const showPriceTrend = (item: QuoteItem) => { trendItem.value = item; priceTrendVisible.value = true; };
+const refreshQuotes = () => { void merchantQuotesPanel.value?.reload(); marketRevision.value++; };
 
 const gemDetailDialog = reactive({
   visible: false,
@@ -412,3 +435,12 @@ onBeforeUnmount(() => {
   window.ipcRenderer.invoke('db:setPrice', diff);
 });
 </script>
+
+<style scoped>
+.ocr-status { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 13px; color: var(--el-text-color-regular); }
+.ocr-status-dot { width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; background: var(--el-color-danger); }
+.ocr-status-dot.is-active { background: var(--el-color-success); }
+.quote-summary { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; font-size: 11px; color: var(--el-text-color-secondary); }
+.quote-summary .el-link { font-size: 11px; }
+.quote-up { color: var(--el-color-danger); } .quote-down { color: var(--el-color-success); }
+</style>

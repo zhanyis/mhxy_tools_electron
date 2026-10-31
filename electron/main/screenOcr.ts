@@ -39,6 +39,7 @@ function createSession(cachePath: string) {
 export function setupScreenOcr(window: BrowserWindow) {
   let selectedSource: string | undefined
   let session: ReturnType<typeof createSession> | undefined
+  const isAppSource = (id: string) => BrowserWindow.getAllWindows().some(item => item.getMediaSourceId() === id)
   const stop = () => {
     selectedSource = undefined
     const previous = session
@@ -63,7 +64,7 @@ export function setupScreenOcr(window: BrowserWindow) {
     }
     try {
       const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] })
-      const source = sources.find(item => item.id === sourceId)
+      const source = sources.find(item => item.id === sourceId && !isAppSource(item.id))
       callback(source ? { video: source } : {})
     } catch {
       callback({})
@@ -79,11 +80,13 @@ export function setupScreenOcr(window: BrowserWindow) {
       if (process.platform === 'darwin' && systemPreferences.getMediaAccessStatus('screen') === 'denied') {
         throw new Error('请在系统设置 → 隐私与安全性 → 屏幕录制中允许本应用，然后重启应用。')
       }
-      return sources.map(source => ({ id: source.id, name: source.name, thumbnail: source.thumbnail.toDataURL() }))
+      return sources.filter(source => !isAppSource(source.id))
+        .map(source => ({ id: source.id, name: source.name, thumbnail: source.thumbnail.toDataURL() }))
     },
     'screen-ocr:select': (event, id: string) => {
       assertSender(event)
       if (typeof id !== 'string' || !/^(screen|window):/.test(id)) throw new Error('无效的屏幕来源')
+      if (isAppSource(id)) throw new Error('不能识别本应用窗口，请选择游戏窗口或屏幕中的游戏文字区域')
       selectedSource = id
     },
     'screen-ocr:start': async event => {

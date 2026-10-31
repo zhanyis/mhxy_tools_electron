@@ -23,3 +23,63 @@ body {
   display: flex;
   flex-direction: column;
 }
+
+/* All dialogs (including nested rule editors) scroll their body, never the overlay/page. */
+.el-overlay-dialog {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 12px;
+  box-sizing: border-box;
+  overflow: hidden !important;
+  overscroll-behavior: contain;
+}
+
+.el-overlay-dialog .el-dialog {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  max-width: 100%;
+  margin: 0 !important;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.el-dialog > .el-dialog__header,
+.el-dialog > .el-dialog__footer {
+  flex-shrink: 0;
+}
+
+.el-dialog > .el-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+/* Confirmation popups and drawers follow the same contained-scroll policy. */
+.el-overlay-message-box {
+  overflow: hidden !important;
+}
+.el-message-box {
+  display: inline-flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 48px);
+  max-width: calc(100vw - 24px);
+}
+.el-message-box__header,
+.el-message-box__btns { flex-shrink: 0; }
+.el-message-box__content {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.el-drawer__body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}

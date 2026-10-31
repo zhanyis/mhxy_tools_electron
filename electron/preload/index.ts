@@ -26,7 +26,14 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
 contextBridge.exposeInMainWorld('electronAPI', {
   // 更新相关 API
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  getUpdateState: () => ipcRenderer.invoke('get-update-state'),
+  onUpdateState: (callback: (state: any) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: any) => callback(state)
+    ipcRenderer.on('update-state', listener)
+    return () => ipcRenderer.removeListener('update-state', listener)
+  },
   startDownload: () => ipcRenderer.invoke('start-download'),
+  installLater: () => ipcRenderer.invoke('install-update-later'),
   quitAndInstall: () => ipcRenderer.invoke('quit-and-install'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   onUpdateAvailable: (callback: (info: any) => void) => {

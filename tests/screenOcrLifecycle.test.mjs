@@ -13,12 +13,14 @@ const transpile = code => ts.transpileModule(code, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText
 const collectorUrl = moduleUrl(transpile(readFileSync(new URL('../src/utils/scrollingText.ts', import.meta.url), 'utf8')))
+const qualityUrl = moduleUrl(transpile(readFileSync(new URL('../src/utils/ocrQuality.ts', import.meta.url), 'utf8')))
 const source = readFileSync(new URL('../src/components/screenOcr.vue', import.meta.url), 'utf8')
 const { descriptor } = parse(source)
 const script = compileScript(descriptor, { id: 'screen-ocr-lifecycle' }).content
   .replace(/from ['"]vue['"]/g, `from ${JSON.stringify(pathToFileURL(require.resolve('vue')).href)}`)
   .replace(/import \{ ElMessage \} from ['"]element-plus['"]/, 'const ElMessage = { success() {}, error() {} }')
   .replace(/from ['"]\.\.\/utils\/scrollingText['"]/, `from ${JSON.stringify(collectorUrl)}`)
+  .replace(/from ['"]\.\.\/utils\/ocrQuality['"]/, `from ${JSON.stringify(qualityUrl)}`)
 const { default: ScreenOcr } = await import(moduleUrl(transpile(script)))
 
 test('closing the dialog preserves initialization and repeated OCR; explicit stop and unmount release capture', async context => {
@@ -32,15 +34,27 @@ test('closing the dialog preserves initialization and repeated OCR; explicit sto
   let bindings
   let controls
   let state
+  const quoteFrames = []
+  let confidence = 90
   const stream = {
     getTracks: () => [track],
     getVideoTracks: () => [track],
   }
   const track = { onended: null, stop: () => { stoppedTracks++ } }
-  const video = { srcObject: null, muted: false, playsInline: false, videoWidth: 800, videoHeight: 600, readyState: 2, play: async () => {}, pause() {} }
+  const video = { srcObject: null, muted: false, playsInline: false, videoWidth: 32, videoHeight: 24, readyState: 2, play: async () => {}, pause() {} }
   const canvas = {
     width: 0, height: 0,
-    getContext: () => ({ drawImage() {} }),
+    getContext: () => ({ drawImage() {}, getImageData: () => {
+      const data = new Uint8ClampedArray(canvas.width * canvas.height * 4)
+      for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+          const index = (y * canvas.width + x) * 4
+          data[index] = data[index + 1] = data[index + 2] = (x + y) % 2 ? 255 : 0
+          data[index + 3] = 255
+        }
+      }
+      return { data }
+    }, putImageData() {} }),
     toBlob: callback => callback(new Blob([String(++frames)])),
   }
   Object.defineProperty(globalThis, 'document', { configurable: true, value: { createElement: tag => tag === 'video' ? video : canvas } })
@@ -51,7 +65,7 @@ test('closing the dialog preserves initialization and repeated OCR; explicit sto
       if (channel === 'screen-ocr:start' && blockInitialization) {
         await new Promise(resolve => { finishInitialization = resolve })
       }
-      if (channel === 'screen-ocr:recognize') return { text: `商品${frames} 100万`, confidence: 90 }
+      if (channel === 'screen-ocr:recognize') return { text: `商品${frames} 100万`, confidence }
     } },
   } })
   const renderer = createRenderer({
@@ -73,6 +87,7 @@ test('closing the dialog preserves initialization and repeated OCR; explicit sto
   const Root = { setup: () => () => h(Component, {
     modelValue: open.value,
     onStateChange: value => { state = value },
+    onTextRecognized: value => quoteFrames.push(value),
     'onUpdate:modelValue': value => { open.value = value },
   }) }
   const container = {}
@@ -86,23 +101,35 @@ test('closing the dialog preserves initialization and repeated OCR; explicit sto
     const initialization = controls.start()
     await nextTick()
     assert.equal(state.active, true)
+    assert.equal(open.value, false, 'screen capture must collapse the dialog to avoid self-capture')
     open.value = false
     await nextTick()
     assert.equal(count('stop'), 0, 'closing during model loading must not stop OCR')
     assert.equal(video.srcObject, stream)
     finishInitialization()
     await initialization
+    assert.equal(count('recognize'), 0, 'first sample must wait for a stable second frame')
+
+    context.mock.timers.tick(1000)
+    await new Promise(resolve => setImmediate(resolve))
     assert.equal(count('recognize'), 1)
+    assert.equal(quoteFrames.length, 1)
+    assert.ok(quoteFrames[0].sharpness >= 6)
 
     context.mock.timers.tick(1000)
     await new Promise(resolve => setImmediate(resolve))
     assert.equal(count('recognize'), 2, 'OCR must keep sampling while the dialog is closed')
     assert.equal(bindings.lines.value.length, 2)
+    confidence = 65
+    context.mock.timers.tick(1000)
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(count('recognize'), 3)
+    assert.equal(quoteFrames.length, 2, 'low-confidence OCR remains visible but cannot enter quote extraction')
     open.value = true
     await nextTick()
     assert.equal(count('stop'), 0, 'reopening must preserve the existing session')
 
-    controls.stop()
+    bindings.toggle(false)
     await nextTick()
     assert.equal(state.active, false)
     assert.equal(state.ready, false)
@@ -110,11 +137,13 @@ test('closing the dialog preserves initialization and repeated OCR; explicit sto
     assert.equal(video.srcObject, null)
     context.mock.timers.tick(2000)
     await new Promise(resolve => setImmediate(resolve))
-    assert.equal(count('recognize'), 2, 'turning off the external switch must cancel sampling')
+    assert.equal(count('recognize'), 3, 'turning off the switch must cancel sampling')
 
     blockInitialization = false
     await bindings.share({ id: 'screen:1', name: '测试屏幕', thumbnail: '' })
-    await controls.start()
+    bindings.toggle(true)
+    await nextTick()
+    assert.equal(state.active, true)
     renderer.render(null, container)
     assert.equal(stoppedTracks, 2, 'leaving the price page must release capture')
     assert.equal(count('stop'), 2)

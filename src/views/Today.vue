@@ -1,10 +1,10 @@
 <template>
-  <div class="today-body">
+  <div class="today-body" :inert="saving">
     <el-descriptions title="搬砖记录" :column="2" :label-width="130" border>
       <template #extra>
         <el-button class="ml-2" type="primary" plain @click="startTimer" v-if="timeStart === 0">开始计时</el-button>
         <el-button class="ml-2" type="danger" plain @click="endTimer" v-else>结束计时</el-button>
-        <el-button class="ml-2" type="success" plain @click="saveRecord">记录收益</el-button>
+        <el-button class="ml-2" type="success" plain :loading="saving" @click="saveRecord">记录收益</el-button>
         <el-button class="ml-2" type="warning" plain style="margin-left: 0.5rem" @click="resetRecordConfirm">重置记录</el-button>
       </template>
       <el-descriptions-item label="金价(每3000w)"><el-input v-model="goldPrice" /></el-descriptions-item>
@@ -12,14 +12,14 @@
       <el-descriptions-item label="点卡"><priceInput v-model="pointPrice" /></el-descriptions-item>
       <el-descriptions-item label="点卡消费MHB"><priceInput :modelValue="Number(pointConsumed)" disabled /></el-descriptions-item>
       <el-descriptions-item label="初始MHB"><priceInput v-model="initCash" /></el-descriptions-item>
-      <el-descriptions-item label="物品收益MHB"><priceInput v-model="bagsGain" /></el-descriptions-item>
+      <el-descriptions-item label="物品收益MHB"><priceInput :modelValue="bagsGain" readonly /></el-descriptions-item>
       <el-descriptions-item label="结束MHB"><priceInput v-model="endCash" /></el-descriptions-item>
-      <el-descriptions-item label="累计收益MHB"><priceInput v-model="netMhb" /></el-descriptions-item>
+      <el-descriptions-item label="累计收益MHB"><priceInput :modelValue="netMhb" readonly /></el-descriptions-item>
       <el-descriptions-item label="同时打开账号"><el-input-number v-model="sameTimeAccount" :min="1" /></el-descriptions-item>
       <el-descriptions-item label="换算现金收益">{{ sumProfit }}</el-descriptions-item>
     </el-descriptions>
     <!-- <p class="mt-1 el-descriptions__title">背包</p> -->
-    <itemsTransfer class="mt-1" v-model:bags="bags"/>
+    <itemsTransfer class="today-items" v-model:bags="bags"/>
   </div>
 </template>
 
@@ -28,7 +28,7 @@ import itemsTransfer from '../components/itemsTransfer.vue';
 import { useTodayStore } from '../store/useTodayStore';
 import { storeToRefs } from 'pinia';
 import { useSettings } from '../hooks/useSettings';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useTimestamp } from '@vueuse/core'
 import dayjs from 'dayjs';
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -40,6 +40,7 @@ const { bags, timeStart, endCash, accumulatedTime, recordStart } = storeToRefs(u
 const { resetRecord } = useTodayStore();
 
 const { timestamp, pause, resume } = useTimestamp({ controls: true })
+const saving = ref(false);
 
 const netMhb = computed(() => {
   return endCash.value - initCash.value - Number(pointConsumed.value) + bagsGain.value;
@@ -63,10 +64,11 @@ const pointConsumed = computed(() => {
 })
 
 const startTimer = () => {
-  if (accumulatedTime.value === '00:00:00') {
-    recordStart.value = new Date().valueOf();
+  if (saving.value) return;
+  if (recordStart.value === 0) {
+    recordStart.value = Date.now();
   }
-  timeStart.value = new Date().valueOf();
+  timeStart.value = Date.now();
   resume();
 }
 
@@ -78,11 +80,13 @@ const bagsGain = computed(() => {
 })
 
 const sumProfit = computed(() => {
-  return ((netMhb.value + bagsGain.value - Number(pointConsumed.value)) * goldPrice.value / 30000000).toFixed(2);
+  return (netMhb.value * goldPrice.value / 30000000).toFixed(2);
 })
 
 const endTimer = () => {
-  accumulatedTime.value = timeConsumed.value;
+  if (saving.value || timeStart.value === 0) return;
+  const seconds = Math.max(0, Math.floor((Date.now() - timeStart.value) / 1000));
+  accumulatedTime.value = sumTime(formatSecond(seconds), accumulatedTime.value);
   timeStart.value = 0;
   pause();
 }
@@ -102,6 +106,7 @@ const formatSecond = (second: number) => {
 }
 
 const resetRecordConfirm = () => {
+  if (saving.value) return;
   ElMessageBox.confirm(
     '确定要重置现有记录吗？这将清空所有当前记录数据。',
     '警告',
@@ -135,33 +140,53 @@ const resetRecordConfirm = () => {
     })
 }
 
-const saveRecord = () => {
-  if (recordStart.value === 0 || accumulatedTime.value === '00:00:00') {
+const saveRecord = async () => {
+  if (saving.value) return;
+  if (recordStart.value === 0) {
     ElMessage({
-      message: '请先开始/结束计时',
+      message: '请先开始计时，再记录收益',
       type: 'warning'
     });
     return;
   }
-  const record = {
-    start: dayjs(recordStart.value).format('YYYY-MM-DD HH:mm:ss'),
-    end: dayjs().format('YYYY-MM-DD HH:mm:ss'),
-    time: accumulatedTime.value,
-    mhb: netMhb.value,
-    point: pointConsumed.value,
-    goldPrice: goldPrice.value,
-    bags: JSON.stringify(bags.value),
-    profit: Number(sumProfit.value),
-    sameTimeAccount: sameTimeAccount.value,
-    bagsGain: bagsGain.value
+  // Include the active segment using the click time, not the last timer tick.
+  endTimer();
+  if (accumulatedTime.value === '00:00:00') {
+    ElMessage({ message: '计时不足1秒，请继续计时后再记录', type: 'warning' });
+    return;
   }
-  window.ipcRenderer.invoke('db:addRecord', record).then(() => {
+  saving.value = true;
+  try {
+    const record = {
+      start: dayjs(recordStart.value).format('YYYY-MM-DD HH:mm:ss'),
+      end: dayjs(Date.now()).format('YYYY-MM-DD HH:mm:ss'),
+      time: accumulatedTime.value,
+      mhb: netMhb.value,
+      point: Number(pointConsumed.value),
+      goldPrice: Number(goldPrice.value),
+      bags: JSON.stringify(bags.value),
+      profit: Number(sumProfit.value),
+      sameTimeAccount: Number(sameTimeAccount.value),
+      bagsGain: bagsGain.value
+    };
+    for (const [label, value] of [['累计收益', record.mhb], ['点卡消费', record.point], ['金价', record.goldPrice],
+      ['账号数量', record.sameTimeAccount], ['物品收益', record.bagsGain]] as const) {
+      if (!Number.isInteger(value) || value < -2147483648 || value > 2147483647) throw new Error(`${label}须为有效整数，且不能超出存储范围`);
+    }
+    if (record.goldPrice <= 0 || record.sameTimeAccount < 1 || !Number.isFinite(record.profit)) throw new Error('请检查金价、账号数量和收益输入');
+    await window.ipcRenderer.invoke('db:addRecord', record);
     ElMessage({
       message: '记录成功',
       type: 'success'
     });
     resetRecord();
-  });
+    pause();
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    ElMessage({ message: `记录失败：${reason.slice(0, 240)}。当前记录已保留，请重试。`, type: 'error', duration: 6000 });
+  } finally {
+    saving.value = false;
+  }
 }
 </script>
 
@@ -169,8 +194,30 @@ const saveRecord = () => {
 .today-body {
   display: flex;
   flex-direction: column;
-  margin: 16px;
+  margin: 16px 16px 10px;
   box-sizing: content-box;
+  border: 0;
+  padding: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.today-body > .el-descriptions {
+  flex-shrink: 0;
+}
+
+.today-items {
+  flex: 1;
+  height: auto;
+  min-height: 200px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 640px) {
+  .today-items {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 360px;
+  }
 }
 
 .today-grid-header {
@@ -188,6 +235,11 @@ const saveRecord = () => {
 }
 
 /* 修改 el-descriptions 内部表格单元格的样式 */
+:deep(.el-descriptions__table) {
+  table-layout: fixed;
+  width: 100%;
+}
+
 :deep(.el-descriptions__body .el-descriptions__table.is-bordered .el-descriptions__cell) {
   padding: 5px 11px;
 }

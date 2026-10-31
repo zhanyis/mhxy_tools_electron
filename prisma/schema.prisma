@@ -40,3 +40,76 @@ model WorkRecord {
 
   @@map("records")
 }
+
+model MerchantQuote {
+  id          Int    @id @default(autoincrement())
+  scope       String
+  itemKey     String
+  itemName    String
+  itemType    String
+  merchant    String
+  merchantKey String
+  gameId      String
+  price       Int
+  rawText     String
+  observedAt  String
+  day         String
+  createdAt   String
+
+  @@unique([scope, merchantKey, itemKey, day])
+  @@index([scope, itemKey, day])
+  @@map("merchant_quotes")
+}
+
+model MerchantQuoteRule {
+  id          Int    @id @default(autoincrement())
+  scope       String
+  merchantKey String
+  itemKey     String
+  keyword     String
+
+  @@unique([scope, merchantKey, itemKey, keyword])
+  @@map("merchant_quote_rules")
+}
+
+model ShoutRecord {
+  id         Int    @id @default(autoincrement())
+  scope      String
+  rawKey     String
+  rawText    String
+  day        String
+  observedAt String
+  createdAt  String
+
+  @@unique([scope, rawKey, day])
+  @@map("shout_records")
+}
+
+model ShoutQuote {
+  id       Int    @id @default(autoincrement())
+  shoutId  Int
+  scope    String
+  day      String
+  itemKey  String
+  itemName String
+  itemType String
+  price    Int
+
+  @@unique([shoutId, itemKey])
+  @@index([scope, itemKey, day])
+  @@map("shout_quotes")
+}
+
+model ShoutParsingRule {
+  id     Int    @id @default(autoincrement())
+  scope  String
+  config String
+
+  @@map("shout_parsing_rules")
+}
+
+model ShoutMigration {
+  key String @id
+
+  @@map("shout_migrations")
+}

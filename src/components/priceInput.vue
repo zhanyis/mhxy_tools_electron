@@ -2,6 +2,7 @@
   <el-input
     v-if="!props.disabled"
     :input-style="{ color: getColorByValue(value) }"
+    :readonly="props.readonly"
     v-model="value"
   />
   <span v-else :style="{ color: getColorByValue(value) }">{{ value }}</span>
@@ -11,6 +12,7 @@
 const props = defineProps<{
   modelValue?: number;
   disabled?: boolean;
+  readonly?: boolean;
 }>();
 
 const value = defineModel<number>()

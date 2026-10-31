@@ -2,52 +2,120 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release:
-    runs-on: ${{ matrix.os }}
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate version tag
+        run: node -e "const p=require('./package.json'); if(!/^\d+\.\d+\.\d+$/.test(p.version)||process.env.GITHUB_REF_NAME!=='v'+p.version) throw Error('Tag must match package version')"
+      - name: Install dependencies
+        run: npm install --package-lock=false
+      - name: Generate Prisma client for tests
+        run: npm run prisma:generate
+      - name: Tests
+        run: npm test
+      - name: Build app
+        run: npm run build:app
+      - name: Package Windows without publishing
+        run: npx electron-builder --win --x64 --publish never
+      - name: Verify and stage Windows update assets
+        run: npm run release:stage -- win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-win
+          path: release-assets/win/*
+          if-no-files-found: error
 
+  other-platforms:
+    # Other platform/signing failures must not block Windows releases.
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
-
+        include:
+          - os: macos-latest
+            platform: mac
+          - os: ubuntu-latest
+            platform: linux
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
-
-      - name: Install Dependencies
-        run: npm install
-
-      - name: Build & Publish to GitHub Release
-        run: npm run release
+          node-version: 22
+      - name: Validate version tag
+        run: node -e "const p=require('./package.json'); if(!/^\d+\.\d+\.\d+$/.test(p.version)||process.env.GITHUB_REF_NAME!=='v'+p.version) throw Error('Tag must match package version')"
+      - run: npm install --package-lock=false
+      - run: npm run build:app
+      - name: Package without publishing
+        run: npx electron-builder --${{ matrix.platform }} --publish never
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - run: npm run release:stage -- ${{ matrix.platform }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: release-assets/${{ matrix.platform }}/*
+          if-no-files-found: error
 
-      # - name: Upload Artifact
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: release_on_${{ matrix.os }}
-      #     path: release/
-      #     retention-days: 5
-
-      # - name: Release
-      #   uses: softprops/action-gh-release@v2
-      #   if: github.ref_type == 'tag'
-      #   with:
-      #     tag_name: ${{ github.ref }}
-      #     files: release/*
-      #     draft: false
-      #     prerelease: false
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+  publish:
+    needs: [windows, other-platforms]
+    if: ${{ always() && needs.windows.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release-assets
+      - name: Verify Windows bundle before publishing
+        run: |
+          npm install --no-save --ignore-scripts --package-lock=false --prefix /tmp/release-validator js-yaml@4.1.0
+          NODE_PATH=/tmp/release-validator/node_modules node scripts/releaseAssets.mjs verify release-assets
+      - name: Refuse to overwrite a published version
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {data: releases} = await github.rest.repos.listReleases({...context.repo, per_page: 100});
+            const tag = context.ref.replace('refs/tags/', '');
+            if (releases.some(r => r.tag_name === tag && !r.draft)) throw new Error('This version is already public. Bump package version and push a new matching tag.');
+      - name: Upload all assets to a draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          draft: true
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: release-assets/*
+      - name: Publish only after required assets are uploaded
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {data: releases} = await github.rest.repos.listReleases({...context.repo, per_page: 100});
+            const release = releases.find(r => r.tag_name === context.ref.replace('refs/tags/', ''));
+            if (!release) throw new Error('Release not found');
+            const version = JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version;
+            const required = [`mhxy-tools-Windows-${version}-Setup.exe`, `mhxy-tools-Windows-${version}-Setup.exe.blockmap`, 'latest.yml'];
+            const {data: assets} = await github.rest.repos.listReleaseAssets({...context.repo, release_id: release.id, per_page: 100});
+            for (const name of required) if (!assets.some(a => a.name === name && a.size > 0)) throw new Error(`Missing release asset: ${name}`);
+            await github.rest.repos.updateRelease({...context.repo, release_id: release.id, draft: false, prerelease: false});

@@ -27,10 +27,10 @@
   ],
   "mac": {
     "target": [
-      "dmg"
+      "dmg", "zip"
     ],
-    "artifactName": "${productName}-Mac-${version}-Installer.${ext}",
-    "icon": "build/icons/icon.ico"
+    "artifactName": "mhxy-tools-Mac-${version}-Installer.${ext}",
+    "icon": "build/icons/icon.icns"
   },
   "win": {
     "target": [
@@ -41,7 +41,7 @@
         ]
       }
     ],
-    "artifactName": "${productName}-Windows-${version}-Setup.${ext}",
+    "artifactName": "mhxy-tools-Windows-${version}-Setup.${ext}",
     "icon": "build/icons/icon.ico"
   },
   "nsis": {
@@ -55,11 +55,14 @@
     "target": [
       "AppImage"
     ],
-    "artifactName": "${productName}-Linux-${version}.${ext}"
+    "artifactName": "mhxy-tools-Linux-${version}.${ext}",
+    "icon": "build/icons/512x512.png"
   },
   "publish": [
     {
       "provider": "github",
+      "owner": "zhanyis",
+      "repo": "mhxy_tools_electron",
       "releaseType": "release"
     }
   ]

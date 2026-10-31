@@ -3,6 +3,7 @@ import path from 'node:path'
 import { app } from 'electron'
 import { PrismaClient } from '@prisma/client'
 import defaultDb from './db'
+import { ShoutQuoteRepository } from './shoutQuotes'
 
 type LegacyPrice = { id: number; name: string; price: number; type: string; image: string }
 type LegacyRecord = {
@@ -28,6 +29,7 @@ class Database {
   private readonly dbPath: string
   private readonly legacyDbPath: string
   private readonly client: PrismaClient
+  readonly market: ShoutQuoteRepository
 
   constructor() {
     const userDataPath = app.getPath('userData')
@@ -35,6 +37,7 @@ class Database {
     this.legacyDbPath = path.join(userDataPath, 'db.json')
     process.env.DATABASE_URL = `file:${this.dbPath}`
     this.client = new PrismaClient()
+    this.market = new ShoutQuoteRepository(this.client)
   }
 
   async init() {
@@ -42,6 +45,7 @@ class Database {
     await this.client.$executeRawUnsafe('CREATE TABLE IF NOT EXISTS "prices" ("id" INTEGER NOT NULL PRIMARY KEY, "name" TEXT NOT NULL, "price" INTEGER NOT NULL, "type" TEXT NOT NULL, "image" TEXT NOT NULL)')
     await this.client.$executeRawUnsafe('CREATE TABLE IF NOT EXISTS "Settings" ("id" INTEGER NOT NULL PRIMARY KEY, "goldPrice" INTEGER NOT NULL, "pointPrice" INTEGER NOT NULL, "sameTimeAccount" INTEGER NOT NULL, "initCash" INTEGER NOT NULL)')
     await this.client.$executeRawUnsafe('CREATE TABLE IF NOT EXISTS "records" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "start" TEXT NOT NULL, "end" TEXT NOT NULL, "time" TEXT NOT NULL, "mhb" INTEGER NOT NULL, "point" INTEGER NOT NULL, "goldPrice" INTEGER NOT NULL, "bags" TEXT NOT NULL, "profit" REAL NOT NULL, "sameTimeAccount" INTEGER NOT NULL, "bagsGain" INTEGER NOT NULL)')
+    await this.market.init()
 
     const legacyData = await this.readLegacyData()
     if (await this.client.price.count() === 0) {

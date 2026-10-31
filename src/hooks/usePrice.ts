@@ -30,7 +30,6 @@ export const usePrice = () => {
 
   const init = () => {
     window.ipcRenderer.invoke('db:getPrice').then((res) => {
-      console.log('test from price', res);
       const typeMap: Price = {};
       res.forEach((item: PriceItem) => {
         if (!typeMap[item.type]) {

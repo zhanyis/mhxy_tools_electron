@@ -12,6 +12,14 @@ export const setupApi = async () => {
   await database.init()
   db = database
 
+  ipcMain.handle('market:confirm', async (_event, input) => database.market.confirm(input))
+  ipcMain.handle('market:snapshot', async (_event, scope) => database.market.snapshot(scope))
+  ipcMain.handle('market:history', async (_event, scope, itemKey) => database.market.history(scope, itemKey))
+  ipcMain.handle('market:deleteQuote', async (_event, id) => database.market.deleteQuote(id))
+  ipcMain.handle('market:deleteRule', async (_event, id, scope, confirmed) => database.market.deleteRule(id, scope, confirmed))
+  ipcMain.handle('market:saveRule', async (_event, input) => database.market.saveRule(input))
+  ipcMain.handle('market:importRules', async (_event, scope, input) => database.market.importRules(scope, input))
+
   ipcMain.handle('db:getPrice', async () => {
     return database.read('price')
   })

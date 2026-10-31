@@ -18,11 +18,15 @@ async function initialize() {
     workerPath,
     errorHandler: reportError,
   })
-  await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK, preserve_interword_spaces: '1' })
+  // Chat panes may contain several text blocks, not one continuous paragraph.
+  await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO, preserve_interword_spaces: '1', user_defined_dpi: '300' })
   port.on('message', async (image: Uint8Array) => {
     try {
-      const { data } = await worker.recognize(Buffer.from(image))
-      port.postMessage({ type: 'result', data: { text: data.text, confidence: data.confidence } })
+      const { data } = await worker.recognize(Buffer.from(image), {}, { text: true, blocks: true })
+      const lines = data.blocks?.flatMap(block => block.paragraphs.flatMap(paragraph =>
+        paragraph.lines.map(line => ({ text: line.text, confidence: line.confidence,
+          words: line.words.map(word => ({ text: word.text, confidence: word.confidence })) }))))
+      port.postMessage({ type: 'result', data: { text: data.text, confidence: data.confidence, lines } })
     } catch (error) { reportError(error) }
   })
   port.postMessage({ type: 'ready' })
