@@ -13,6 +13,11 @@ test('release tag must exactly match a stable package version', () => {
   for (const tag of ['v1.2.4', '1.2.3', 'v1.2.3-beta.1']) assert.throws(() => validateTag(tag, '1.2.3'))
 })
 
+test('v0.1.8 release tag matches the package version', () => {
+  validateTag('v0.1.8')
+  assert.throws(() => validateTag('v0.1.7'))
+})
+
 test('Windows staging requires consistent installer, SHA512, size, metadata and blockmap; ignores unpacked utilities', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'release-assets-'))
   const source = path.join(directory, 'source'), staged = path.join(directory, 'staged')
